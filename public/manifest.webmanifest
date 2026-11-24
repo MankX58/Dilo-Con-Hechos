@@ -1,0 +1,11 @@
+{
+  "name": "Dilo con hechos",
+  "short_name": "Dilo con hechos",
+  "description": "Aprende a contar tu experiencia en la hoja de vida y en la entrevista. Para personas que buscan empleo en Antioquia.",
+  "lang": "es-CO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F4EC",
+  "theme_color": "#14532D",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

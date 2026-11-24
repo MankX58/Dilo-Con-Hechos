@@ -1,0 +1,4 @@
+{
+  "framework": "vite",
+  "functions": { "api/tutor.ts": { "maxDuration": 30 } }
+}
