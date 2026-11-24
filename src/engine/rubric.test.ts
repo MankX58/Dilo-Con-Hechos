@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { evalLogro, evalPuente, evalRepregunta, evalStar, passLogro, passPuente, passStar, plain, repreguntaLocal, score, segmentStar, trustSegments } from "./rubric";
 import { comentariosRespuesta, comparar, pistaPersonal } from "../personal";
+import { partesIniciales, unir } from "../screens/Taller";
 import { CASOS, PERFILES, PREGUNTA_BASE, PUENTE_EJEMPLO, SECTORES, VACANTES, adivinarOrigen, vacanteOtra } from "../content";
 
 const failed = (c: { ok: boolean; id: string }[]) => c.filter((x) => !x.ok).map((x) => x.id);
@@ -32,6 +33,10 @@ describe("enunciado de logro", () => {
   it("ser más flexible no regala criterios", () => {
     expect(failed(evalLogro("Trabajé tiempo completo en una tienda del centro atendiendo a los clientes"))).toEqual(expect.arrayContaining(["verbo", "dato", "resultado"]));
     expect(passLogro(evalLogro("Ganas de aprender y buena actitud en la tienda de mi tía durante un año"))).toBe(false);
+  });
+  it("una línea copiada de una hoja de vida (sustantivos, sin resultado) no pasa por logro", () => {
+    expect(failed(evalLogro("Atención al cliente y manejo de caja registradora, cuadre de caja al final del turno."))).toEqual(expect.arrayContaining(["verbo", "dato", "resultado"]));
+    expect(evalLogro("Atención al cliente en la caja").find((x) => x.id === "verbo")!.msg).toMatch(/Atendí/);
   });
   it("no da por bueno un texto sin sentido", () => {
     const c = evalLogro("asd asd asd asdf qwer zxcv sdfg asd");
@@ -86,6 +91,18 @@ describe("catálogo de vacantes", () => {
   });
   it("cada sector tiene al menos dos vacantes", () => {
     for (const k of Object.keys(SECTORES)) expect(Object.values(VACANTES).filter((v) => v.sector === k).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("logro armado por partes", () => {
+  it("un texto de la hoja subida queda en «qué hiciste» y las respuestas llenan lo que falta", () => {
+    const p = partesIniciales({ crudo: "Atendí clientes en la caja de un supermercado en Rionegro.", hechos: [{ a: "unos 120 clientes por turno" }, { a: "la caja siempre cuadró" }] });
+    expect(p).toEqual({ que: "Atendí clientes en la caja de un supermercado en Rionegro", dato: "unos 120 clientes por turno", res: "la caja siempre cuadró" });
+    expect(unir(p)).toBe("Atendí clientes en la caja de un supermercado en Rionegro, unos 120 clientes por turno, la caja siempre cuadró.");
+    expect(passLogro(evalLogro(unir(p)))).toBe(true);
+  });
+  it("no repite un dato que el texto ya tenía", () => {
+    expect(partesIniciales({ crudo: "Vendí 30 arepas diarias", hechos: [{ a: "unas 30" }] }).dato).toBe("");
   });
 });
 

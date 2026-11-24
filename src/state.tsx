@@ -26,6 +26,8 @@ export interface Logro {
   habilidad?: string | null;
   /** Si viene de la hoja de vida subida: id de esa experiencia. */
   cv?: string;
+  /** Lo que lleva escrito en cada parte del logro (modo por partes del taller). */
+  partes?: { que: string; dato: string; res: string };
 }
 export type TipoPregunta = "star" | "puente";
 export interface Respuesta { pregunta: string; tipo?: TipoPregunta; intentos: string[] }

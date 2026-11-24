@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { PERFILES, type PerfilId } from "../content";
 import { ExperienciaBox, OrigenPicker } from "../components/Origen";
-import { evalLogro, passLogro, type LogroCriterio } from "../engine/rubric";
+import { evalLogro, hasNumber, hasResult, passLogro, type LogroCriterio } from "../engine/rubric";
 import { useIA } from "../ai/client";
 import { entradaConocer, useMomento } from "../ai/tutor";
 import { Annotated, AnswerBox, Checks, Formula, Guide, Icon, Meter, Quiz, Score, Speak, TutorNote, Typing, mayus, minus, ParaQue } from "../components/ui";
@@ -167,7 +167,7 @@ function Hechos({ logro, vacante, ia, preguntasLocales }: { logro: Logro; vacant
   return (
     <div className="work">
       <div className="stack-lg">
-        <blockquote className="quote"><p className="label">Lo que escribiste</p>{logro.crudo}</blockquote>
+        <blockquote className="quote"><p className="label">{logro.cv ? "Lo que dice tu hoja de vida" : "Lo que escribiste"}</p>{logro.crudo}</blockquote>
         {esperando ? (
           <div className="tutor loading" aria-live="polite"><Typing /> El tutor está leyendo tu experiencia…</div>
         ) : (
@@ -202,11 +202,6 @@ function Hechos({ logro, vacante, ia, preguntasLocales }: { logro: Logro; vacant
       </div>
       <aside className="margin">
         <Memoria />
-        <div className="note">
-          <p className="label">Por qué estas preguntas</p>
-          <p>Tus respuestas se vuelven fichas que usas en el siguiente paso para escribir el logro con tus palabras.</p>
-          <p className="small muted">{ia && deIA?.length ? "Preguntas hechas por el tutor IA a partir de lo que escribiste." : "Preguntas del revisor por criterios según lo que le falta a tu texto."}</p>
-        </div>
       </aside>
     </div>
   );
@@ -216,7 +211,14 @@ function Escribir({ logro, vacante, ia }: { logro: Logro; vacante: string; ia: b
   const { s, updateLogro, go, move, vacante: vac } = useApp();
   const ref = useRef<HTMLTextAreaElement>(null);
   const resultado = useRef<HTMLDivElement>(null);
-  const [texto, setTexto] = useState(logro.borrador);
+  // Por partes: cada criterio tiene su espacio y la frase se arma sola. Así un texto ya hecho (de la hoja subida)
+  // no hay que desarmarlo a mano: queda en «qué hiciste» y solo se completa lo que falta.
+  const [modo, setModo] = useState<"partes" | "corrido">(logro.intentos.length ? "corrido" : "partes");
+  const [partes, setPartes] = useState<Partes>(() => partesIniciales(logro));
+  const [foco, setFoco] = useState<keyof Partes>(partes.dato ? "res" : "dato");
+  const [libre, setLibre] = useState(logro.borrador);
+  const texto = modo === "partes" ? unir(partes) : libre;
+  const setParte = (k: keyof Partes, v: string) => setPartes((p) => ({ ...p, [k]: v }));
   const [habilidad, setHabilidad] = useState<string | null>(logro.habilidad ?? null);
   const [flash, setFlash] = useState(0);
   const live = evalLogro(texto);
@@ -240,15 +242,16 @@ function Escribir({ logro, vacante, ia }: { logro: Logro; vacante: string; ia: b
   const ai = esPrimero ? mom.data : null;
   const retro = ai && ai._para === ultimo ? ai : null;
   const leyendo = esPrimero && mom.cargando && ultimo === primero;
-  useEffect(() => { const t = setTimeout(() => updateLogro(logro.id, (l) => ({ ...l, borrador: texto })), 400); return () => clearTimeout(t); }, [texto]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { const t = setTimeout(() => updateLogro(logro.id, (l) => ({ ...l, borrador: texto, partes: modo === "partes" ? partes : undefined })), 400); return () => clearTimeout(t); }, [texto, modo]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (key) resultado.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [key]);
 
   function insertar(a: string) {
+    if (modo === "partes") { setParte(foco, partes[foco].trim() ? `${partes[foco].trim()} ${a}` : a); setFlash((f) => f + 1); return; }
     const el = ref.current;
     const at = el?.selectionStart ?? texto.length;
     const antes = texto.slice(0, at), despues = texto.slice(at);
     const pieza = (antes && !/\s$/.test(antes) ? " " : "") + a + (despues && !/^\s/.test(despues) ? " " : "");
-    setTexto(antes + pieza + despues);
+    setLibre(antes + pieza + despues);
     setFlash((f) => f + 1);
     requestAnimationFrame(() => { el?.focus(); const p = (antes + pieza).length; el?.setSelectionRange(p, p); });
   }
@@ -260,25 +263,45 @@ function Escribir({ logro, vacante, ia }: { logro: Logro; vacante: string; ia: b
     <div className="work">
       <div className="stack-lg">
         <Guide ia={Boolean(ok && ai?.al_lograrlo)}>{logro.intentos.length === 0
-          ? (logro.hechos.length ? `Me contaste ${logro.hechos.map((h) => `«${h.a}»`).join(" y ")}. Con eso ya tienes casi todo: úsalo para escribir tu logro. Toca cada ficha para ponerla donde está el cursor.` : "Ahora te toca a ti. Escribe tu logro con lo que recuerdes; las barras se encienden a medida que cumples cada parte.")
+          ? (modo === "partes"
+            ? (logro.cv ? "Armemos tu logro por partes. Ya puse lo que dice tu hoja de vida y lo que me contaste. Solo completa lo que falte." : "Armemos tu logro por partes. Ya puse lo que me contaste. Completa lo que falte y mira abajo cómo queda.")
+            : logro.hechos.length ? `Me contaste ${logro.hechos.map((h) => `«${h.a}»`).join(" y ")}. Úsalo para escribir tu logro. Toca cada ficha para ponerla donde está el cursor.` : "Escribe tu logro con lo que recuerdes; las barras se encienden a medida que cumples cada parte.")
           : ok ? (ai?.al_lograrlo || "Muy bien. Ese logro ya dice qué hiciste, cuánto y qué cambió.")
           : "Vas bien. Mira qué criterio falta y ajusta solo eso."}</Guide>
-        <blockquote className="quote"><p className="label">Lo que escribiste al principio</p>{logro.crudo}</blockquote>
+        {modo === "corrido" && <blockquote className="quote"><p className="label">Lo que escribiste al principio</p>{logro.crudo}</blockquote>}
         {logro.hechos.length > 0 && (
           <div className="stack-sm">
-            <p className="label">Tus datos · tócalos para ponerlos en tu frase</p>
+            <p className="label">{modo === "partes" ? "Tus datos · toca uno para ponerlo en la parte que estás llenando" : "Tus datos · tócalos para ponerlos en tu frase"}</p>
             <div className="facts-chips">{logro.hechos.map((h, i) => <button key={h.q} type="button" className="fact" style={{ "--i": i } as CSSProperties} onClick={() => insertar(h.a)} title={h.q}>{h.a}</button>)}</div>
           </div>
         )}
-        <div className={flash ? "flash" : ""} key={flash}>
-          <AnswerBox id={`logro-${logro.id}`} rows={3} value={texto} onChange={setTexto} textareaRef={ref}
-            label="Reescríbelo como un logro" hint="Verbo de acción + qué, dónde o para quién + un dato + el resultado. Una o dos líneas." />
-        </div>
-        <Meter checks={live} />
-        {texto.trim() && !revisado && (
-          <p className="meter-falta" aria-live="polite">
-            {live.every((c) => c.ok) ? "Ya tiene las 4 partes. Revísalo para confirmarlo." : `Te falta: ${live.filter((c) => !c.ok).map((c) => c.label.toLowerCase()).join(", ")}.`}
-          </p>
+        {modo === "partes" ? (
+          <div className="partes">
+            <CampoParte k="que" foco={foco} setFoco={setFoco} value={partes.que} onChange={(v) => setParte("que", v)} checks={live} ids={["verbo", "concreto"]} hayTexto={Boolean(texto)}
+              label={<><span className="k-v">Qué hiciste</span>, dónde o para quién</>} hint="Empieza con un verbo en pasado: Atendí, Organicé, Preparé, Cuidé." placeholder={`Ej.: ${tramo(perfil, "v")} ${tramo(perfil, "q")}`} />
+            <CampoParte k="dato" foco={foco} setFoco={setFoco} value={partes.dato} onChange={(v) => setParte("dato", v)} checks={live} ids={["dato"]} hayTexto={Boolean(texto)}
+              label={<><span className="k-d">Un dato</span>: cuántos, cada cuánto o cuánto tiempo</>} hint="Si no sabes la cifra exacta, una aproximación honesta sirve: «unos 30», «casi todos los días»." placeholder={`Ej.: ${tramo(perfil, "d")}`} />
+            <CampoParte k="res" foco={foco} setFoco={setFoco} value={partes.res} onChange={(v) => setParte("res", v)} checks={live} ids={["resultado"]} hayTexto={Boolean(texto)}
+              label={<><span className="k-r">Qué salió bien</span> gracias a ti</>} hint="Lo que mejoró, se logró o no falló." placeholder={`Ej.: ${tramo(perfil, "r")}`} />
+            <div className={`asi-queda${flash ? " flash" : ""}`} key={flash} aria-live="polite">
+              <p className="label">Así se lee en tu hoja de vida</p>
+              <p className="specimen">{texto || <span className="muted">Llena las partes y aquí aparece tu frase.</span>}</p>
+              <button type="button" className="link" onClick={() => { setLibre(texto); setModo("corrido"); }}>Prefiero escribirla de corrido</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={flash ? "flash" : ""} key={flash}>
+              <AnswerBox id={`logro-${logro.id}`} rows={3} value={libre} onChange={setLibre} textareaRef={ref}
+                label="Reescríbelo como un logro" hint="Verbo de acción + qué, dónde o para quién + un dato + el resultado. Una o dos líneas." />
+            </div>
+            <Meter checks={live} />
+            {texto.trim() && !revisado && (
+              <p className="meter-falta" aria-live="polite">
+                {live.every((c) => c.ok) ? "Ya tiene las 4 partes. Revísalo para confirmarlo." : `Te falta: ${live.filter((c) => !c.ok).map((c) => c.label.toLowerCase()).join(", ")}.`}
+              </p>
+            )}
+          </>
         )}
         <div className="actions">
           <button className="btn" disabled={!texto.trim() || revisado} onClick={() => updateLogro(logro.id, (l) => ({ ...l, intentos: [...l.intentos, texto.trim()] }))}>
@@ -291,7 +314,7 @@ function Escribir({ logro, vacante, ia }: { logro: Logro; vacante: string; ia: b
           <div className="stack result" ref={resultado} key={key} aria-live="polite">
             <Score checks={checks} />
             {cambio && <p className="cambio">{cambio}</p>}
-            <Checks checks={checks} />
+            {modo === "corrido" && <Checks checks={checks} />}
             <TutorNote ia={ia} loading={leyendo} retro={retro} />
             {!ok && !retro && !leyendo && ai?.si_te_trabas && <p className="tutor-mini">{ai.si_te_trabas}</p>}
             {!ok && falta && !retro && !leyendo && <div className="ask"><p className="label">Pregunta del tutor</p><p>{pistaPersonal(checks!, logro.hechos, logro.crudo) ?? perfil.preguntas[falta.id as LogroCriterio]}</p></div>}
@@ -341,11 +364,45 @@ function Escribir({ logro, vacante, ia }: { logro: Logro; vacante: string; ia: b
       </div>
       <aside className="margin">
         <Memoria />
-        <div className="note">
-          <p className="label">Recuerda</p>
-          <p>Verbo de acción + qué hiciste + un dato + el resultado. Evita «responsable» o «proactivo»: muéstralo con un hecho.</p>
-        </div>
       </aside>
+    </div>
+  );
+}
+
+type Partes = { que: string; dato: string; res: string };
+const sinCierre = (t: string) => t.trim().replace(/[\s.;,]+$/, "");
+const tramo = (p: (typeof PERFILES)[PerfilId], k: "v" | "q" | "d" | "r") => p.logro.find(([, t]) => t === k)?.[0] ?? "";
+
+/** Une las partes en una sola frase de hoja de vida. */
+export function unir(p: Partes): string {
+  const t = [p.que, p.dato, p.res].map(sinCierre).filter(Boolean).join(", ");
+  return t ? `${mayus(t)}.` : "";
+}
+
+/** Lo que ya estaba escrito va a «qué hiciste»; las respuestas de la persona, al dato o al resultado si les faltan. */
+export function partesIniciales(l: { crudo: string; hechos: { a: string }[]; partes?: Partes }): Partes {
+  if (l.partes) return l.partes;
+  const que = sinCierre(l.crudo);
+  const resp = l.hechos.map((h) => h.a.trim()).filter(Boolean);
+  const dato = hasNumber(que) ? "" : resp.find(hasNumber) ?? "";
+  const res = hasResult(que) ? "" : resp.find((a) => a !== dato && hasResult(a)) ?? "";
+  return { que, dato, res };
+}
+
+function CampoParte({ k, label, hint, placeholder, value, onChange, foco, setFoco, checks, ids, hayTexto }: {
+  k: keyof Partes; label: ReactNode; hint: string; placeholder: string; value: string; onChange: (v: string) => void;
+  foco: keyof Partes; setFoco: (k: keyof Partes) => void; checks: ReturnType<typeof evalLogro>; ids: LogroCriterio[]; hayTexto: boolean;
+}) {
+  const mal = checks.find((c) => ids.includes(c.id as LogroCriterio) && !c.ok);
+  const id = `parte-${k}`;
+  const props = { id, value, placeholder, className: "input", autoComplete: "off", onFocus: () => setFoco(k), onChange: (e: { target: { value: string } }) => onChange(e.target.value) };
+  return (
+    <div className={`parte${foco === k ? " foco" : ""}${hayTexto && !mal ? " ok" : ""}`}>
+      <label className="field" htmlFor={id}>{label}</label>
+      {k === "que" ? <textarea rows={3} {...props} /> : <input {...props} />}
+      {!hayTexto ? <p className="hint">{hint}</p>
+        : mal ? <p className="hint parte-falta">{mal.msg}</p>
+        : <p className="hint parte-bien"><Icon name="check" size={14} /> {value.trim() ? "Listo" : "Ya está en tu frase. Puedes dejarlo vacío."}</p>}
     </div>
   );
 }

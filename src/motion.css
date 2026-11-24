@@ -625,3 +625,17 @@ a, .link { text-underline-offset: .2em; }
 .hv-sig { display: flex; justify-content: flex-end; padding-top: .4rem; }
 .campo-aviso { font-size: .85rem; color: var(--amber); font-weight: 700; }
 .hv-campo .input[aria-invalid] { border-color: var(--amber); }
+
+/* Taller: el logro se arma por partes y la frase aparece debajo. */
+.partes { display: grid; gap: 1rem; }
+.parte { padding: .9rem 1rem 1rem; border: 1.5px solid var(--rule); border-radius: 12px; background: var(--paper); transition: border-color .2s, background-color .2s; }
+.parte.foco { border-color: var(--forest); }
+.parte.ok { background: color-mix(in srgb, var(--forest-tint) 45%, var(--paper)); }
+.parte .field { font-weight: 600; }
+.parte .field span { font-weight: 700; }
+.parte .hint { margin-bottom: 0; }
+.parte-falta { color: var(--amber) !important; font-weight: 600; }
+.parte-bien { display: flex; align-items: center; gap: .35rem; color: var(--forest) !important; font-weight: 600; }
+.asi-queda { display: grid; gap: .4rem; justify-items: start; padding: 1.1rem 1.2rem; border-radius: 12px; border: 1.5px dashed var(--rule-strong); }
+.asi-queda p { margin: 0; }
+.asi-queda .specimen { font-size: 1.15rem; }
